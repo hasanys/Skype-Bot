@@ -19,6 +19,7 @@ class SkypeBot:
     which_bot = 0
     edit_mode_enabled = False
     bots = ['Chomsky', 'Lauren', 'iEinstein', 'ALICE', 'Cleverbot']
+    magic_ball_responses = ["It is certain", "It is decidedly so", "Without a doubt", "Yes definitely", "You may rely on it", "As I see it, yes", "Most likely", "Outlook good", "Yes", "All signs point to yes", "Reply hazy, try again", "Ask again later", "Better not tell you now", "Cannot predict now", "Concentrate and ask again", "Don't count on it", "My reply is no", "My sources say no", "Outlook not so good", "Very doubtful"]
     
     def __init__(self):
         self.skype = Skype4Py.Skype()
@@ -134,6 +135,8 @@ class SkypeBot:
                 self.ProcessMessage(Message)
             elif Message.Body.find("!rand") != -1:
                 Message.Chat.SendMessage("Rolling... " + `random.randint(0,100)`)
+            elif Message.Body.find("!8ball ") != -1 and Message.Body.find("?") != -1:
+                Message.Chat.SendMessage(self.magic_ball_responses[random.randint(0,19)])
             elif Message.Body.find("!switch") != -1:
                 self.current_bot = (self.current_bot + 1) % 5
                 self.skype.Profile('FULLNAME', self.bots[self.current_bot])
