@@ -163,7 +163,7 @@ class SkypeBot:
             elif Message.Body.find("!rand") != -1:
                 Message.Chat.SendMessage("Rolling... " + `random.randint(0,100)`)
             elif Message.Body.find("!8ball ") != -1 and Message.Body.find("?") != -1:
-                Message.Chat.SendMessage(self.magic_ball_responses[random.randint(0,19)])
+                Message.Chat.SendMessage(self.magic_ball_responses[random.randint(0,len(self.magic_ball_responses) - 1)])
             elif Message.Body.find("!switch") != -1:
                 self.current_bot = (self.current_bot + 1) % 5
                 self.skype.Profile('FULLNAME', self.bots[self.current_bot])
