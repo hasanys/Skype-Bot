@@ -12,9 +12,11 @@ class SkypeBot:
     
     previousConvo = [[None for i in range(3)] for j in range(10)]
     chat = None
-    
+
+    topic = ""
     copy_cat = False
     botsession = None
+    target_datetime = None
     other_bot_session = None
     current_bot = 0
     in_autonomous_mode = False
@@ -56,6 +58,11 @@ class SkypeBot:
     CoupGame = None
     call_out_move = False
     block_move = False
+    rps_players = {}
+    rps_chat = None
+    player1 = []
+    player2 = []
+    
     Skype_Coup_title = "Yasir Hasan" ## This is the title of your chat for playing Coup
     
     def __init__(self):
@@ -65,7 +72,7 @@ class SkypeBot:
         factory = ChatterBotFactory()
 
         for elem in self.skype.Chats:
-            if len(elem.Members) > 3 and len(elem.Members )< 7:
+            if len(elem.Members) == 7 and elem.Topic != "Coup" and elem.Topic != "=D":
                 self.chat = elem
                 print self.chat.Topic
                 break
@@ -101,8 +108,27 @@ class SkypeBot:
         
         self.skype.OnMessageStatus = self.MessageStatus
 
-        thread.start_new_thread( self.edit_bot, () )
+        #thread.start_new_thread( self.edit_bot, () )
+        thread.start_new_thread( self.countdown_timer, () )
 
+    def countdown_timer(self):
+        while True: 
+            if self.target_datetime != None:
+                current = datetime.datetime.now()
+                delta = self.target_datetime - current
+                print str(delta.seconds) + " And " + str(delta.seconds%3600)
+                if delta.total_seconds() < 28000:
+                    if delta.total_seconds() % 60 < 5:
+                        remaining = int(delta.total_seconds()/60)
+                        self.topic = "A mere " + str(remaining) + " Minutes Remain."                
+                elif delta.seconds % 3600 < 10:
+                    remaining = delta.days * 24 + int(delta.seconds/3600.0)
+                    self.topic = str(remaining) + " Hours Remain..."
+                
+                if self.chat.Topic.find(self.topic) == -1:
+                    self.chat.Topic = self.topic
+
+            time.sleep(0.5)
     def edit_bot(self):
         i = 0 ##Store the last 10 previous messages
         
@@ -118,8 +144,7 @@ class SkypeBot:
             stack_messages = ""
 
             instance = self.chat.Messages[:10]
-##            if self.chat.Topic != "Yasir is not Indian":
-##                self.chat.Topic = "Yasir is not Indian"
+
             for m in instance:
                 ## Check if the saved message and current messages are by the same person, sent at the same time.
                 if m.Timestamp == self.previousConvo[i][1] and m.Sender.Handle == self.previousConvo[i][2]:
@@ -291,8 +316,40 @@ class SkypeBot:
                     return
                 return
             
-            if len(Message.Chat.Members) == 2:
+            if len(Message.Chat.Members) == 2 and Message.Body[0] != '!':
                 self.ProcessMessage(Message)
+            elif Message.Body.find("!rps") != -1:
+                if len(Message.Chat.Members) != 3:
+                    Message.Chat.SendMessage("Chat group must have 2 members (other than bot) to start a Rock, Paper, Scissors Match.")
+                else:
+                    Message.Chat.SendMessage("Starting new game. Send me a message in a private chat with your move (!rock, !paper, or !scissors).")
+                    self.rps_chat = Message.Chat
+                    self.initialize_rps(Message.Chat.Members)
+            elif len(self.player1) > 0 and (Message.Body.find("!rock") != -1 or Message.Body.find("!paper") != -1 or Message.Body.find("!scissors") != -1):
+                if Message.Sender.FullName == self.player1[0]:
+                    self.player1[1] = Message.Body.replace('!','')
+                elif Message.Sender.FullName == self.player2[0]:
+                    self.player2[1] = Message.Body.replace('!','')
+
+                Message.Chat.SendMessage("Received move.")
+                if self.player1[1] != "" and self.player2[1] != "":
+                    winner = self.check_winner()
+                    if winner == "tie":
+                        self.rps_chat.SendMessage(self.player1[1] + " vs. " + self.player2[1] + " ...Game tied")
+                    else:
+                        self.rps_players[winner][1] = self.rps_players[winner][1] + 1
+                        if self.rps_players[winner][1] == 2:
+                            self.rps_players[self.player1[0]][1] = 0
+                            self.rps_players[self.player2[0]][1] = 0
+                            self.rps_players[winner][0] = self.rps_players[winner][0] + 1
+                            if self.rps_players[winner][0] == 4:
+                                self.rps_chat.SendMessage(winner + " wins the serround.")
+                                self.initialize_rps(self.rps_chat.Members)
+
+                        self.rps_chat.SendMessage(self.player1[1] + " vs. " + self.player2[1] + " ... " + winner + " wins. Starting next game")
+                        self.rps_chat.SendMessage(self.print_rps_stats())
+                    self.player1[1] = ""
+                    self.player2[1] = ""
             elif Message.Body.find("!edit") != -1:
                 if self.edit_mode_enabled == True:
                     Message.Chat.SendMessage("Turning Edit Mode Off...")
@@ -304,9 +361,14 @@ class SkypeBot:
                 self.copy_cat = not self.copy_cat
             elif self.copy_cat == True:
                Message.Chat.SendMessage(Message.Body)
-##            elif Message.Body.find("!countdown") != -1:
-##                if len (Message.Body.split(" ")) > 1:
-##                    
+            elif Message.Body.find("!countdown") != -1:
+                if len (Message.Body.split(" ")) == 2:
+                    time = Message.Body.split(" ")[1].split(",")
+                    ##dt.datetime(2014,8,29,17,00,00)
+                    self.target_datetime = datetime.datetime(int(time[0]),int(time[1]),int(time[2]),int(time[3]),int(time[4]),int(time[5]))
+
+            elif Message.Body.find("!stopcountdown") != -1:
+                print "Setting target_datetime to None"
             elif Message.Body.find("!bot ") != -1:
                 self.ProcessMessage(Message)
             elif Message.Body.find("!rand") != -1:
@@ -369,7 +431,60 @@ class SkypeBot:
 ##                        Message.Chat.SendMessage("No please. Seriously, please. Stop. You're terrible at jokes.")
 
             
+    def initialize_rps(self, members):
+        count = 0
+        for elem in members:
+            if elem.FullName == "Cleverbot":
+                continue
+            self.rps_players[elem.FullName] = [0,0]
+            if count == 0:
+                self.player1 =[elem.FullName, ""]
+            elif count == 1:
+                self.player2 = [elem.FullName, ""]
+            count = count + 1
+        self.rps_players[self.player1[0]][0] = 0
+        self.rps_players[self.player1[0]][1] = 0
 
+        self.rps_players[self.player2[0]][0] = 0
+        self.rps_players[self.player2[0]][1] = 0
+
+    def check_winner(self):
+        winner = ""
+        if self.player1[1] == self.player2[1]:
+            winner = "tie"
+        elif self.player1[1] == "rock":
+            if self.player2[1] == "paper":
+                winner = self.player2[0]
+            elif self.player2[1] == "scissors":
+                winner = self.player1[0]
+            else:
+                winner = "error"
+        elif self.player1[1] == "paper":
+            if self.player2[1] == "rock":
+                winner = self.player1[0]
+            elif self.player2[1] == "scissors":
+                winner = self.player2[0]
+            else:
+                winner = "error"
+        elif self.player1[1] == "scissors":
+            if self.player2[1] == "rock":
+                winner = self.player2[0]
+            elif self.player2[1] == "paper":
+                winner = self.player1[0]
+            else:
+                winner = "error"
+        else:
+            winner = "error"
+
+        if winner == "error":
+            print "Error..." + self.player1[0] + ", " + self.player2[0]
+        return winner
+
+    def print_rps_stats(self):
+        stats1 = self.player1[0] + ": " + str(self.rps_players[self.player1[0]]) + "\n"
+        stats2 = self.player2[0] + ": " + str(self.rps_players[self.player2[0]])
+        return stats1 + stats2
+        
     def conversation(self, Message, bot_num):
         mes = Message.Body
         if Message.Body.find("!conversation") != 1:
@@ -969,20 +1084,19 @@ class ArtificialIntelligence:
             _object.CoupGame.display_stats()
         elif move == "Coup":
             target = ""
+            backup_target = ""
             cards = 0
             for key,value in self._stats.iteritems():
                 if key == "Cleverbot":
                     continue
-                cards = cards + self._stats[key]['cards']
-                if cards == 1:
+                cards = self._stats[key]['cards']
+                if cards > 0:
+                    backup_target = key
+                if cards == 2:
                     target = key
                     break
             if target == "":
-                for i in self._stats:
-                    if i == "Cleverbot":
-                        continue
-                    target = i
-                    break
+                target = backup_target
             _object.DisplayStat("ALL", 'I will Coup ' + target + 'Please lose a card now ... !coup ' + target )
         elif move == "Steal":
             # Figure out who to steal from...
